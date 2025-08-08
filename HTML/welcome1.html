@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bienvenido</title>
+    <!-- Enlace al CSS de Bootstrap para el estilo -->
+    <link href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Estilos personalizados -->
+    <style>
+        /* Estilos existentes para el carrusel */
+        .carousel-inner > .item > img {
+            width: 100%;
+            height: 300px;
+        }
+        .carousel-caption h1, .carousel-caption p {
+            color: white;
+        }
+    
+        /* Nuevo estilo para agregar margen debajo del carrusel */
+        #welcomeCarousel {
+            margin-bottom: 50px; /* Ajusta este valor según sea necesario */
+        }
+    
+        /* Estilos para la sección informativa debajo del carrusel */
+        .marketing {
+            padding-top: 50px; /* Espacio encima de toda la sección */
+            padding-bottom: 50px; /* Espacio debajo de toda la sección */
+        }
+        .marketing .col-lg-3 {
+            text-align: center;
+            margin-top: 20px; /* Añade espacio encima de cada columna si es necesario */
+            padding: 20px; /* Espacio alrededor de cada columna */
+        }
+        .card-body {
+        background-color: #f8f9fa; /* Color de fondo para el contenido expansible */
+        border-radius: 5px; /* Bordes redondeados para el div */
+        padding: 20px; /* Espaciado interno para el contenido */
+        margin-top: 15px; /* Espacio arriba para separar del botón */
+        }
+        /* Nuevos estilos para dividir el contenido en dos columnas */
+        .featurette {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding-bottom: 40px; /* Espacio adicional antes del siguiente bloque */
+        }
+        .featurette-image {
+            flex: 1;
+            padding-right: 20px;
+        }
+        .featurette-text {
+            flex: 1;
+            text-align: justify;
+        }
+        .mitos-heading {
+            font-size: 50px; /* Tamaño del texto */
+            padding: 20px 0; /* Espacio arriba y abajo para centrar verticalmente dentro de su contenedor */
+            margin-top: 20px; /* Espacio adicional en la parte superior si es necesario */
+            font-weight: bold; /* Hacer el texto más grueso */
+            color: #333; /* Color del texto, ajusta según tu diseño */
+            font-family: 'Arial', sans-serif; /* Tipo de letra */
+            letter-spacing: 25px; /* Aumenta el espacio entre caracteres */
+        }
+
+        .custom-text {
+            padding-bottom: 40px;
+            font-family: 'Arial', sans-serif; /* Tipo de letra Sans-serif, común y adecuada para el texto */
+            color: #0000ff; /* Código de color hexadecimal para azul */
+            font-size: 24px; /* Tamaño de letra adecuado para hacerlo legible */
+            text-align: center; /* Centra el texto horizontalmente dentro de su contenedor */
+            padding: 20px;
+        }
+
+        .centered-text {
+            text-align: center; /* Alinea el texto al centro horizontalmente */
+            padding: 15px; /* Añade algo de espacio alrededor del texto */
+            margin-top: 20px; /* Espacio adicional en la parte superior si es necesario */
+            font-size: 20px;
+            margin-left: 50px; /* Margen izquierdo */
+            margin-right: 50px; /* Margen derecho */
+
+        }
+
+        .card-body {
+            padding: 40px;
+        }
+
+
+
+    
+
+    </style>
+    
+</head>
+<body>
+    <div id="welcomeCarousel" class="carousel slide" data-ride="carousel">
+        <!-- Indicadores -->
+        <ol class="carousel-indicators">
+            <li data-target="#welcomeCarousel" data-slide-to="0" class="active"></li>
+            <li data-target="#welcomeCarousel" data-slide-to="1"></li>
+            <li data-target="#welcomeCarousel" data-slide-to="2"></li>
+        </ol>
+
+        <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.12.4/jquery.min.js"></script>
+            <script>
+            function changeTab(tabId) {
+                $('.nav-tabs a[href="#' + tabId + '"]').tab('show'); // Cambia la pestaña activa en la interfaz de usuario de Shiny
+            }
+        </script>
+
+        <!-- Imágenes del carrusel -->
+        <div class="carousel-inner" role="listbox">
+            <div class="item active">
+                <img src="www/imagen1.jpg" alt="Imagen 1">
+                <div class="carousel-caption">
+                    <h1>Welcome to the App</h1>
+                    <p>Discover what our app can do for you.</p>
+                </div>
+            </div>
+            <div class="item">
+                <img src="www/imagen2.webp" alt="Imagen 2">
+                <div class="carousel-caption">
+                    <h1>Indentify your industry</h1>
+                    <p>Analyze the impact of automation on your industry.</p>
+                </div>
+            </div>
+            <div class="item">
+                <img src="www/imagen3.webp" alt="Imagen 3">
+                <div class="carousel-caption">
+                    <h1>Identify your city</h1>
+                    <p>Check out some of the advices and resources available for your city.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Controles -->
+        <a class="left carousel-control" href="#welcomeCarousel" role="button" data-slide="prev">
+            <span class="glyphicon glyphicon-chevron-left" aria-hidden="true"></span>
+            <span class="sr-only">Anterior</span>
+        </a>
+        <a class="right carousel-control" href="#welcomeCarousel" role="button" data-slide="next">
+            <span class="glyphicon glyphicon-chevron-right" aria-hidden="true"></span>
+            <span class="sr-only">Siguiente</span>
+        </a>
+    </div>
+    <!-- Sección Informativa -->
+
+
+    <div class="container">
+        <div class="row featurette">
+            <div class="col-md-6 featurette-text">
+                <h2 class="featurette-heading centered-title">What is automation?</h2>
+                <p class="lead">Automation refers to the use of systems or technological elements that perform processes and tasks without human intervention, with the aim of increasing efficiency, reducing errors, and saving time and resources.</p>
+            </div>
+            <div class="col-md-6 featurette-image">
+                <img src="www/im1.png" alt="Automation" class="img-responsive">
+            </div>
+        </div>
+    </div>
+    
+    <div class="container">
+        <div class="row">
+            <div class="col-md-12 text-center">
+                <h2 class="mitos-heading">MYTHS</h2>
+            </div>
+        </div>
+    </div>
+    
+    <div class="container">
+        <div class="row featurette">
+            <div class="col-md-6 featurette-text">
+                <h2 class="featurette-heading">Automation will eliminate all jobs</h2>
+                <p class="lead">One of the most widespread myths is that automation will result in massive job losses. While it is true that some jobs may be replaced, automation also creates new jobs and can improve the quality of existing jobs by eliminating repetitive tasks and allowing workers to focus on more strategic and creative aspects of their work.</p>
+            </div>
+            <div class="col-md-6 featurette-image">
+                <img src="www/OF1.webp" alt="Automation" class="img-responsive">
+            </div>
+        </div>
+    </div>
+    
+    <div class="container">
+        <div class="row featurette">
+            <div class="col-md-6 featurette-image">
+                <img src="www/im3.webp" alt="Automation" class="img-responsive">
+            </div>
+            <div class="col-md-6 featurette-text">
+                <h2 class="featurette-heading">Automation is only for large companies</h2>
+                <p class="lead">Another myth is that only large corporations can benefit from automation due to its cost and complexity. Nowadays, there are automation solutions available for businesses of all sizes, including small and medium-sized enterprises, which can be scalable and adjustable to different needs and budgets.</p>
+            </div>
+            
+        </div>
+    </div>
+    
+    <div class="container">
+        <div class="row featurette">
+            <div class="col-md-6 featurette-text">
+                <h2 class="featurette-heading">Automation only affects manufacturing</h2>
+                <p class="lead">Although automation has a significant impact on the manufacturing industry, its use extends to many other sectors, including services, healthcare, agriculture, finance, and more. Almost any process that requires consistency and repetition is a candidate for automation.</p>
+            </div>
+            <div class="col-md-6 featurette-image">
+                <img src="www/OF2.avif" alt="Automation" class="img-responsive">
+            </div>
+        </div>
+    </div>
+    
+    
+    <div class="container-fluid" style="background-color: #f8f9fa; padding: 20px;">
+        <div class="row">
+            <div class="col-xs-12 text-center">
+                <img src="www/text1.png" alt="Descripción de la imagen" class="img-responsive" style="margin: 0 auto;">
+            </div>
+        </div>
+    </div>
+    
+
+
+    <div class="container-fluid" style="background-color: #f8f9fa; padding: 20px;">
+        <div class="row">
+            <div class="col-xs-12 text-center">
+                <h2>Identify your city</h2>
+            </div>
+        </div>
+    </div>
+
+
+
+    <!-- Bootstrap JavaScript -->
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.12.4/jquery.min.js"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
+</body>
+</html>
