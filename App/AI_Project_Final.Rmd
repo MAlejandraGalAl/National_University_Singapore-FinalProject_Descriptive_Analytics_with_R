@@ -1,0 +1,1291 @@
+---
+title: "Project_R_Final"
+author: "Jakub Dziedzic"
+date: "2024-11-08"
+output: html_document
+---
+
+#Libraries
+```{r install libraries}
+library(jsonlite)
+library(shiny)
+library(shinyjs)
+library(shinythemes)
+library(wordcloud)
+library(readxl)  
+library(RColorBrewer)
+library(plotly)
+library(dplyr)
+library(ggplot2)
+library(ggridges)
+library(gridExtra)
+library(leaflet)
+library(tm)
+```
+
+#Load Data
+```{r}
+setwd("C:\\Users\\alega\\OneDrive\\Documentos\\ProjecttR")
+ai <- read.csv('ai_FINAL.csv')
+```
+##Data Manipulation
+```{r}
+#Dont run if the final ai csv file is read
+df <- data.frame(
+  City = c("Dubai", "Singapore", "Berlin", "Tokyo", "San Francisco", "London", "Paris", "Sydney", "New York", "Toronto"),
+  GDP_2023_Billion_USD = c(499.2, 423.6, 4467, 4371, 26206, 3250, 3190, 1580, 26206, 2342),
+  GDP_Growth_2023_Percent = c(3.4, 3.0, 0.2, 1.3, 2.1, 0.5, 0.7, 1.5, 2.1, 1.2)
+)
+ai <- merge(ai,df, by.x = 'Location', by.y = 'City')
+
+
+
+# Automation_Impact_Score
+
+# This column will provide a calculated likelihood of automation. This will help assessing how susceptible different jobs and industries are to being replaced
+
+ai <- ai %>%
+  mutate(Automation_Impact_Score = case_when(
+    AI_Adoption_Level == "High" & Automation_Risk == "High" ~ 10,
+    AI_Adoption_Level == "High" & Automation_Risk == "Medium" ~ 8,
+    AI_Adoption_Level == "High" & Automation_Risk == "Low" ~ 6,
+    AI_Adoption_Level == "Medium" & Automation_Risk == "High" ~ 8,
+    AI_Adoption_Level == "Medium" & Automation_Risk == "Medium" ~ 6,
+    AI_Adoption_Level == "Medium" & Automation_Risk == "Low" ~ 4,
+    AI_Adoption_Level == "Low" & Automation_Risk == "High" ~ 6,
+    AI_Adoption_Level == "Low" & Automation_Risk == "Medium" ~ 4,
+    TRUE ~ 2
+  ))
+
+
+
+
+# Group by industry and Summarize Average Salary
+
+# This provides isnights into the avrege compenstation within the occupation. Might be useful fro comparison among different fields
+
+# Summarize average salary by Industry
+average_salary_by_industry <- ai %>%
+  group_by(Industry, Job_Title) %>%
+  summarize(Average_Salary = mean(Salary_USD, na.rm = TRUE))
+
+ai <- ai %>%
+  left_join(average_salary_by_industry, by = c("Industry", 'Job_Title'))
+
+
+
+#Compensation Including Stock Options and Bonuses
+
+# Assumption -> Stock_options are worth 10% of the salary and Bonus might reach up to 15% of the basic salary
+# Create stock options and bonus percentages
+
+ai <- ai %>% # Industries that are mopre likely to be compensated with stock options
+  mutate(Stock_Option_Percent = case_when(
+    Industry %in% c("Technology", "Finance", "Telecommunications") ~ 0.20,
+    Industry %in% c("Manufacturing", "Healthcare", "Energy") ~ 0.10,
+    Industry %in% c("Retail", "Education", "Entertainment") ~ 0.05,
+    TRUE ~ 0.05 # Default to 5% if not specified
+  ),
+  Bonus_Percent = case_when(
+    Industry %in% c("Technology", "Finance", "Telecommunications") ~ 0.20,
+    Industry %in% c("Manufacturing", "Healthcare", "Energy") ~ 0.15,
+    Industry %in% c("Retail", "Education", "Entertainment") ~ 0.10,
+    TRUE ~ 0.1 # Default to 10% if not specified
+  ))
+ai <- ai %>%
+  mutate(Stock_Options = Salary_USD * Stock_Option_Percent,
+         Bonus = Salary_USD * Bonus_Percent,
+         Total_Compensation = Salary_USD + Stock_Options + Bonus)
+
+
+
+# Automation Probability
+# This provides a way to quantify automation risk and compare industries or job titles.
+# It can be used to evaluate which sectors may face immediate automation threats.
+
+ai <- ai %>%
+  mutate(Automation_Probability = case_when(
+    AI_Adoption_Level == "High" & Automation_Risk == "High" ~ runif(1, 80, 100),     # High AI Adoption & High Risk, high probability
+    AI_Adoption_Level == "High" & Automation_Risk == "Medium" ~ runif(1, 60, 80),   # High AI Adoption & Medium Risk, medium-high probability
+    AI_Adoption_Level == "High" & Automation_Risk == "Low" ~ runif(1, 40, 60),      # High AI Adoption & Low Risk, medium probability
+    AI_Adoption_Level == "Medium" & Automation_Risk == "High" ~ runif(1, 60, 80),   # Medium AI Adoption & High Risk, medium-high probability
+    AI_Adoption_Level == "Medium" & Automation_Risk == "Medium" ~ runif(1, 40, 60), # Medium AI Adoption & Medium Risk, medium probability
+    AI_Adoption_Level == "Medium" & Automation_Risk == "Low" ~ runif(1, 20, 40),    # Medium AI Adoption & Low Risk, medium-low probability
+    AI_Adoption_Level == "Low" & Automation_Risk == "High" ~ runif(1, 40, 60),      # Low AI Adoption & High Risk, medium probability
+    AI_Adoption_Level == "Low" & Automation_Risk == "Medium" ~ runif(1, 20, 40),    # Low AI Adoption & Medium Risk, medium-low probability
+    TRUE ~ runif(1, 0.0, 20)                                                        # Default case, low probability
+  ))
+
+# AI adoption level vs Company Size
+# Shows how common each AI Adoption Level is for each company size.
+# For instance, it tells us if large companies tend to adopt AI at higher levels than small companies.
+
+# Create a new column that counts the occurrences of AI Adoption Level per Company Size
+ai <- ai %>%
+  group_by(Company_Size, AI_Adoption_Level) %>% 
+  mutate(count = n()) %>%  # Add the count of companies in each group
+  group_by(Company_Size) %>%  
+  mutate(AI_Adoption_Count = sum(count),  # Total companies per size
+         AI_Adoption_Rate_Per_Company_Size = (count / sum(count))*100) %>%  # Adoption rate per size
+  ungroup() 
+
+
+# Job Security Index
+
+#This index gives an idea of how secure a job might be based on its automation risk and the growth projection for the role.
+
+ai <- ai %>%
+  mutate(Job_Security_Index = case_when(
+    Automation_Risk == "Low" & Job_Growth_Projection == "Growth" ~ "High",
+    Automation_Risk == "High" & Job_Growth_Projection == "Decline" ~ "Low",
+    TRUE ~ "Medium"
+  ))
+
+
+# add most common degrees
+common_degrees <- c(
+  "Product Manager" = "Business Administration, Marketing, Engineering",
+  "Sales Manager" = "Business Administration, Marketing, Economics",
+  "Cybersecurity Analyst" = "Computer Science, Information Technology, Cybersecurity",
+  "HR Manager" = "Human Resource Management, Business Administration, Psychology",
+  "Data Scientist" = "Computer Science, Statistics, Mathematics",
+  "UX Designer" = "Graphic Design, Human-Computer Interaction, Psychology",
+  "Marketing Specialist" = "Marketing, Business Administration, Communications",
+  "Operations Manager" = "Business Administration, Operations Management, Industrial Engineering",
+  "Software Engineer" = "Computer Science, Software Engineering, Information Technology",
+  "AI Researcher" = "Computer Science, Artificial Intelligence, Mathematics"
+)
+
+# Common degrees in certain industries
+ai <- ai %>% 
+  mutate(Common_Degrees = common_degrees[Job_Title])
+
+
+
+# JOB GROWTH PROJECTION
+get_base_growth_rate <- function(job_growth) {
+  if (job_growth == "Growth") {
+    return(c(4, 5))  # 4-5%
+  } else if (job_growth == "Stable") {
+    return(c(2, 3))  # 2-3%
+  } else if (job_growth == "Decline") {
+    return(c(-2, 1))  # -2-1%
+  }
+}
+
+# Calculate only the necessary columns with percentages
+ai <- ai %>%
+  rowwise() %>%
+  mutate(
+    # Base Growth Rate
+    Base_Growth_Rate_Low = get_base_growth_rate(Job_Growth_Projection)[1],
+    Base_Growth_Rate_High = get_base_growth_rate(Job_Growth_Projection)[2],
+    
+    # GDP Growth Factor
+    GDP_Growth_Factor = GDP_Growth_2023_Percent.x / 10,
+    
+    # Automation Impact Factor (directly using Automation_Probability as percentage)
+    Automation_Impact_Factor_Low = Automation_Probability * 1.01 / 100,  # 1% impact
+    Automation_Impact_Factor_High = Automation_Probability * 1.02 / 100,  # 2% impact
+    
+    # Final Annual Growth Rate (low, high, and mean) in percentage
+    Annual_Growth_Rate_Low = Base_Growth_Rate_Low + GDP_Growth_Factor - Automation_Impact_Factor_Low,
+    Annual_Growth_Rate_High = Base_Growth_Rate_High + GDP_Growth_Factor - Automation_Impact_Factor_High,
+    Annual_Growth_Rate_Mean = (Annual_Growth_Rate_Low + Annual_Growth_Rate_High) / 2,
+    
+    # Projected Total Compensation in 5 Years (low, high, and mean)
+    Projected_Total_Compensation_Low_5Y = Total_Compensation * (1 + Annual_Growth_Rate_Low / 100)^5,  # Convert percentage to decimal for calculation
+    Projected_Total_Compensation_High_5Y = Total_Compensation * (1 + Annual_Growth_Rate_High / 100)^5,
+    Projected_Total_Compensation_Mean_5Y = (Projected_Total_Compensation_Low_5Y + Projected_Total_Compensation_High_5Y) / 2
+  ) %>%
+  select(-Base_Growth_Rate_Low, -Base_Growth_Rate_High, -GDP_Growth_Factor, -Automation_Impact_Factor_Low, -Automation_Impact_Factor_High)  # Remove intermediate calculations
+
+
+# Add the new column "Type of Automation" based on the industry
+ai <- ai %>%
+  mutate(Type_of_Automation = case_when(
+    Industry %in% c("Manufacturing", "Transportation", "Construction") ~ "Physical",
+    Industry %in% c("Finance", "Education", "Healthcare") ~ "Cognitive",
+    Industry %in% c("Information Technology", "Telecommunications") ~ "Hybrid",
+    TRUE ~ "Unknown"  # For industries not clearly fitting into a category or unspecified
+  ))
+```
+
+## Data Preprocessing
+```{r}
+unique(ai$Location)
+ai$Location <- as.factor(ai$Location)
+unique(ai$Job_Title) #Alright
+ai$Job_Title <- as.factor(ai$Job_Title)
+unique(ai$Industry) # Alright
+ai$Industry <- as.factor(ai$Industry)
+unique(ai$Company_Size) # Alright
+ai$Company_Size <- as.factor(ai$Company_Size)
+unique(ai$AI_Adoption_Level) #Alright
+ai$AI_Adoption_Level <- as.factor(ai$AI_Adoption_Level)
+unique(ai$Automation_Risk) #Alright
+ai$Automation_Risk <- as.factor(ai$Automation_Risk)
+unique(ai$Required_Skills) #Alright
+ai$Required_Skills <- as.factor(ai$Required_Skills)
+unique(ai$Remote_Friendly) #Alright
+ai$Remote_Friendly <- as.factor(ai$Remote_Friendly)
+unique(ai$Job_Growth_Projection) #Alright
+ai$Job_Growth_Projection <-as.factor(ai$Job_Growth_Projection)
+unique(ai$Job_Security_Index) #Alright
+ai$Job_Security_Index <- as.factor(ai$Job_Security_Index)
+unique(ai$Common_Degrees) #Alright
+ai$Common_Degrees <- as.factor(ai$Common_Degrees)
+unique(ai$Type_of_Automation) #Alright
+ai$Type_of_Automation <-as.factor(ai$Type_of_Automation)
+```
+
+
+#Visualization
+```{r}
+
+# Function to plot a bar chart with a slight gradient for Salary
+plot_salary_by_industry <- function(location) {
+  
+  # Step 1: Filter the data by location
+  filtered_data <- ai %>% filter(Location == location)
+  
+  # Step 2: Ensure the second variable (Salary_USD) is numeric (if it is stored as a factor or character)
+  if (!is.numeric(filtered_data$Salary_USD)) {
+    filtered_data$Salary_USD <- as.numeric(as.character(filtered_data$Salary_USD))
+  }
+  
+  # Step 3: Group by the first variable (Industry) and calculate the average of the second variable (Salary_USD)
+  grouped_data <- filtered_data %>%
+    group_by(Industry) %>%
+    summarise(average_value = mean(Salary_USD, na.rm = TRUE)) %>%
+    arrange(desc(average_value))  # Sort the data in descending order by the average value
+  
+  # Step 4: Plot the bar chart with a gradient fill based on Salary
+  p <- ggplot(grouped_data, aes(x = reorder(Industry, -average_value), y = average_value, fill = average_value)) +
+    geom_bar(stat = "identity", color = "black") +
+    geom_text(aes(label = round(average_value, 2)), vjust = -0.7, size = 2) +
+    labs(title = paste("Average Salary by Industry in", location),
+         x = "Industry", y = "Average Salary (USD)") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    scale_fill_gradient(low = "peru", high = "chocolate4", guide = FALSE)  # Subtle gradient
+  
+  renamed_data <- grouped_data %>% rename(value_col = average_value)
+  
+  # Return both the plot and the renamed dataframe
+  return(list(
+    plot = p,
+    data = renamed_data
+  ))
+}
+
+
+# Function with only data and location as inputs, with hardcoded first_var and second_var
+plot_industry_automation_impact_score <- function(location) {
+  
+  # Hardcoding the first and second variables
+  first_var <- "Industry"
+  second_var <- "Automation_Impact_Score"
+  
+  # Step 1: Filter the data by location
+  filtered_data <- ai %>% filter(Location == location)
+  
+  # Step 2: Ensure the second variable (Automation_Risk) is numeric (if stored as a factor or character)
+  if (!is.numeric(filtered_data[[second_var]])) {
+    filtered_data[[second_var]] <- as.numeric(as.character(filtered_data[[second_var]]))
+  }
+  
+  # Step 3: Group by the first variable (Industry) and calculate the average of the second variable (Automation_Risk)
+  grouped_data <- filtered_data %>%
+    group_by(Industry) %>%
+    summarise(average_value = mean(Automation_Impact_Score, na.rm = TRUE)) %>%
+    arrange(desc(average_value))  # Sort the data in descending order by the average value
+  
+  # Step 4: Plot the bar chart with average values
+  p <- ggplot(grouped_data, aes(x = Industry, y = average_value)) +
+    geom_bar(stat = "identity", fill = "skyblue", color = "black") +
+    geom_text(aes(label = round(average_value, 2)), vjust = -0.9, size = 2.5) +
+    labs(title = paste("Average Automation Risk by Industry in", location),
+         x = "Industry", y = "Average Automation Risk") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  
+  renamed_data <- grouped_data %>% rename(value_col = average_value)
+  
+  # Return both the plot and the renamed dataframe
+  return(list(
+    plot = p,
+    data = renamed_data
+  ))
+}
+
+
+# Function to compare job growth projection across industries with interactive plot
+plot_job_growth_by_industry <- function(location) {
+  
+  # Step 1: Filter the data by location
+  filtered_data <- ai %>% filter(Location == location)
+  
+  # Step 2: Group by industry and job growth projection and count occurrences
+  grouped_data <- filtered_data %>%
+    group_by(Industry, Job_Growth_Projection) %>%
+    summarise(count = n()) %>%
+    ungroup()
+  #Set Colors
+  growth_colors <- c("Growth" = "#66FF66", "Decline" = "#FF6666", "Stable" = "#FFCC66")
+  
+  # Step 3: Plot the bar chart
+  p <- ggplot(grouped_data, aes(x = Industry, y = count, fill = Job_Growth_Projection)) +
+    geom_bar(stat = "identity", position = "dodge", color = "black") +
+    labs(title = paste("Job Growth Projection by Industry in", location),
+         x = "Industry", y = "Count of Job Growth Projections") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    scale_fill_manual(values = growth_colors)  # Use a color palette for different job growth projections
+  
+  summarized_data <- grouped_data %>% rename(value_col1 = Job_Growth_Projection, value_col2 = count)
+  
+  return(list(
+    plot = p,
+    data = summarized_data
+  ))
+}
+
+# Function to plot Automation Probability for all industries, with hardcoded inputs
+plot_automation_probability_by_industry <- function(location) {
+  
+  # Hardcoded variables
+  industry_column <- "Industry"
+  automation_column <- "Automation_Probability"
+  
+  # Step 1: Filter the data by location
+  filtered_data <- ai %>% filter(Location == location)
+  
+  # Step 2: Group by industry and calculate average automation probability for each industry
+  grouped_data <- filtered_data %>%
+    group_by(.data[[industry_column]]) %>%
+    summarise(average_value = mean(.data[[automation_column]], na.rm = TRUE)) %>%
+    arrange(desc(average_value))  # Sort industries by automation probability
+  
+  # Step 3: Create a bar plot to show average automation probability by industry
+  p <- ggplot(grouped_data, aes(x = reorder(Industry, -average_value), y = average_value, fill = average_value)) +
+    geom_bar(stat = "identity", color = "black") +  # Remove fixed fill color and make it dynamic
+    geom_text(aes(label = round(average_value, 2)), vjust = -0.7, size = 2) +  # Show average values
+    labs(title = paste("Average Automation Probability by Industry in", location),
+         x = "Industry", y = "Average Automation Probability (%)") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    scale_fill_gradient(low = "green3", high = "red", name = "Automation Probability (%)")  # Apply gradient from green to red
+  
+  renamed_data <- grouped_data %>% rename(value_col = average_value)
+  
+  # Return both the plot and the renamed dataframe
+  return(list(
+    plot = p,
+    data = renamed_data
+  ))
+}
+
+
+plot_ai_adoption_by_company_size <- function(location) {
+  
+  # Filter data based on the selected location
+  filtered_data <- ai %>% filter(Location == location)
+  
+  # Ensure AI_Adoption_Rate_Per_Company_Size is numeric
+  filtered_data$AI_Adoption_Rate_Per_Company_Size <- as.numeric(filtered_data$AI_Adoption_Rate_Per_Company_Size)
+  
+  # Step 1: Group data by Company Size to calculate the total AI adoption rate and count
+  grouped_data <- filtered_data %>%
+    group_by(Company_Size) %>%
+    summarise(
+      Average_Adoption_Rate = mean(AI_Adoption_Rate_Per_Company_Size, na.rm = TRUE),
+      Count = n()
+    ) %>%
+    arrange(desc(Average_Adoption_Rate))  # Optional: Sort by average adoption rate
+  
+  # Step 2: Create the plot
+  p <- ggplot(grouped_data, aes(x = Company_Size, y = Average_Adoption_Rate, fill = Company_Size)) +
+    geom_bar(stat = "identity", color = "black") +
+    labs(
+      title = paste("AI Adoption Rate vs Company Size in", location),
+      x = "Company Size", y = "Average AI Adoption Rate (%)"
+    ) +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    scale_fill_brewer(palette = "Set2")  # Customize the color palette
+  
+  renamed_data <- grouped_data %>% rename(value_col = Average_Adoption_Rate)
+  
+  # Return both the plot and the summarized dataframe with counts
+  return(list(
+    plot = p,
+    data = renamed_data
+  ))
+}
+
+
+
+# Function to plot skills vs automation risk as percentage for a selected location
+plot_skills_vs_risk_percent <- function(location) {
+  
+  # Filter data based on the selected location
+  filtered_data <- ai %>% filter(Location == location)
+  
+  # Calculate percentage of jobs for each skill and automation risk
+  percent_data <- filtered_data %>%
+    group_by(Required_Skills, Automation_Risk) %>%
+    summarise(Job_Count = n()) %>%
+    mutate(Percent = Job_Count / sum(Job_Count) * 100)
+  
+  # Create the plot with Skills (Required_Skills) on x-axis and Percentage on y-axis
+  p <- ggplot(percent_data, aes(x = Required_Skills, y = Percent, fill = Automation_Risk)) +
+    geom_bar(stat = "identity", position = "dodge") +
+    labs(title = paste("Skills vs Automation Risk (Percentage) for", location),
+         x = "Skills", y = "Percentage of Jobs") +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    scale_fill_brewer(palette = "Set1") # You can customize the color palette
+  
+  summarized_data <- percent_data %>% rename(Industry = Required_Skills, value_col1 = Automation_Risk, value_col2 = Job_Count)
+  
+  # Step 4: Return both the plot and the summarized data
+  return(list(
+    plot = p,
+    data = summarized_data
+  ))
+}
+
+plot_remote_friendly_by_industry <- function(location) {
+  
+  # Step 1: Filter data by location
+  filtered_data <- ai %>% filter(Location == location)
+  
+  # Step 2: Summarize data to calculate the proportion of remote-friendly jobs by industry
+  summarized_data <- filtered_data %>%
+    group_by(Industry, Remote_Friendly) %>%
+    summarise(Job_Count = n(), .groups = "drop") %>%
+    group_by(Industry) %>%
+    mutate(Proportion = Job_Count / sum(Job_Count)) %>%
+    arrange(Industry, desc(Proportion))
+  
+  # Step 3: Create stacked bar plot using the summarized data
+  p <- ggplot(summarized_data, aes(x = Industry, y = Proportion, fill = Remote_Friendly)) +
+    geom_bar(stat = "identity", position = "stack", color = "black") +
+    labs(title = paste("Proportion of Remote-Friendly Jobs by Industry in", location),
+         x = "Industry", y = "Proportion of Jobs") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    scale_fill_brewer(palette = "Set2")
+  
+  summarized_data <- summarized_data %>% rename(value_col = Proportion)
+  
+  # Step 4: Return both the plot and the summarized data
+  return(list(
+    plot = p,
+    data = summarized_data
+  ))
+}
+
+# Function to plot job security index by industry
+plot_job_security_by_industry <- function(location) {
+  
+  # Step 1: Filter data by location
+  filtered_data <- ai %>% filter(Location == location)
+  
+  # Step 2: Calculate proportions for Job Security Index by Industry
+  summarized_data <- filtered_data %>%
+    group_by(Industry, Job_Security_Index) %>%
+    summarise(Job_Count = n(), .groups = "drop") %>%
+    group_by(Industry) %>%
+    mutate(Proportion = Job_Count / sum(Job_Count)) %>%
+    arrange(Industry, desc(Proportion))
+  
+  # Step 3: Create stacked bar plot
+  p <- ggplot(summarized_data, aes(x = Industry, y = Proportion, fill = Job_Security_Index)) +
+    geom_bar(stat = "identity", position = "stack", color = "black") +
+    labs(title = paste("Job Security Index by Industry in", location),
+         x = "Industry", y = "Proportion of Jobs by Security Level") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    scale_fill_brewer(palette = "Set3")
+  
+  summarized_data <- summarized_data %>% rename(value_col = Proportion)
+  
+  # Step 4: Return both the plot and the summarized data
+  return(list(
+    plot = p,
+    data = summarized_data
+  ))
+}
+
+plot_interactive_automation_probability_by_industry <- function(location) {
+  
+  # Step 1: Filter data by the given location
+  filtered_data <- ai %>% filter(Location == location)
+  
+  # Step 2: Create a ggplot object
+  p <- ggplot(filtered_data, aes(x = Automation_Probability, color = Industry, fill = Industry)) +
+    geom_density(alpha = 0.5) +
+    labs(title = paste("Automation Probability by Industry in", location),
+         x = "Automation Probability (%)", y = "Density") +
+    theme_minimal() +
+    theme(legend.position = "bottom")
+  
+  # Step 3: Convert ggplot to plotly
+  interactive_plot <- ggplotly(p)
+  
+  #Step 4: Set all traces (industries) to be hidden by default
+  for (i in seq_along(interactive_plot$x$data)) {
+    interactive_plot$x$data[[i]]$visible <- "legendonly"  # Set all industries to be hidden by default
+  }
+  return(interactive_plot)
+}
+
+# Function to create an interactive box plot for automation probability by industry
+plot_interactive_automation_boxplot <- function(location) {
+  
+  # Step 1: Filter data by the given location
+  filtered_data <- ai %>% filter(Location == location)
+  
+  # Step 2: Create the ggplot box plot
+  p <- ggplot(filtered_data, aes(x = Industry, y = Automation_Probability, color = Industry)) +
+    geom_boxplot() +
+    labs(title = paste("Automation Probability by Industry in", location),
+         x = "Industry", y = "Automation Probability (%)") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  
+  # Step 3: Convert ggplot to an interactive plotly plot and return it
+  interactive_plot <- ggplotly(p)
+  
+  return(interactive_plot)
+}
+
+# Function to plot ridgeline plot of automation probability by industry
+plot_ridgeline_automation <- function(location) {
+  filtered_data <- ai %>% filter(Location == location)
+  
+  ggplot(filtered_data, aes(x = Automation_Probability, y = Industry, fill = Industry)) +
+    geom_density_ridges(alpha = 0.8, scale = 2) +
+    labs(title = paste("Automation Probability Distribution by Industry in", location),
+         x = "Automation Probability", y = "Industry") +
+    theme_minimal() +
+    scale_fill_brewer(palette = "Set3")
+}
+
+# Function to visualize the percentage change in total compensation per industry
+plot_compensation_change_by_industry <- function(location) {
+  
+  # Filter the data by location
+  data_location <- ai %>% filter(Location == location)
+  
+  # Ensure necessary columns are numeric
+  data_location$Total_Compensation <- as.numeric(data_location$Total_Compensation)
+  data_location$Projected_Total_Compensation_Low_5Y <- as.numeric(data_location$Projected_Total_Compensation_Low_5Y)
+  data_location$Projected_Total_Compensation_High_5Y <- as.numeric(data_location$Projected_Total_Compensation_High_5Y)
+  data_location$Projected_Total_Compensation_Mean_5Y <- as.numeric(data_location$Projected_Total_Compensation_Mean_5Y)
+  
+  # Calculate the percentage change in total compensation per industry
+  compensation_change <- data_location %>%
+    group_by(Industry) %>%
+    summarise(Current_Compensation = mean(Total_Compensation, na.rm = TRUE),
+              Projected_Compensation = mean(Projected_Total_Compensation_Mean_5Y, na.rm = TRUE)) %>%
+    mutate(Percent_Change = ((Projected_Compensation - Current_Compensation) / Current_Compensation) * 100)
+  
+  # Create the plot with Industry on x-axis and Percentage Change on y-axis
+  p <- ggplot(compensation_change, aes(x = reorder(Industry, Percent_Change), y = Percent_Change, fill = Percent_Change)) +
+    geom_bar(stat = "identity") +
+    scale_fill_gradient(low = "red", high = "green3") +
+    labs(title = paste("Percentage Change in Total Compensation per Industry in", location),
+         x = "Industry", y = "Percentage Change in Compensation") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    coord_flip() # Flip the axes for better readability
+  
+  renamed_data <- compensation_change %>% rename(value_col = Percent_Change)
+  
+  # Return both the plot and the renamed dataframe
+  return(list(
+    plot = p,
+    data = renamed_data
+  ))
+}
+
+plot_automation_risk_by_industry <- function(location) {
+  
+  # Filter the data based on the selected location
+  filtered_data <- ai %>%
+    filter(Location == location) %>%
+    filter(!is.na(Automation_Risk))  # Remove NA values in Automation Risk
+  
+  # Debugging: Print filtered data
+  print("Filtered Data:")
+  print(filtered_data)
+  
+  # Handle empty filtered data
+  if (nrow(filtered_data) == 0) {
+    return(list(
+      plot = NULL,
+      data = data.frame(Industry = character(), value_col1 = character(), value_col2 = numeric())
+    ))
+  }
+  
+  # Group the data to calculate counts of the value column by industry
+  summarized_data <- filtered_data %>%
+    group_by(Industry, Automation_Risk) %>%
+    summarise(Job_Count = n(), .groups = "drop")
+  
+  # Debugging: Print summarized data
+  print("Summarized Data:")
+  print(summarized_data)
+  
+  # Create the base ggplot with Industry on x-axis and count of Automation Risk categories on y-axis
+  p <- ggplot(filtered_data, aes(x = Industry, fill = Automation_Risk, text = paste("Industry:", Industry, "<br>Automation Risk:", Automation_Risk))) +
+    geom_bar(position = "dodge", color = "black") +  # Add black borders for distinction
+    labs(title = paste("Automation Risk vs Industry in", location),
+         x = "Industry", y = "Count of Jobs by Automation Risk") +
+    theme_minimal() +  # Apply a minimal theme
+    theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 10, color = "black"), 
+          axis.title.x = element_text(size = 12), 
+          axis.title.y = element_text(size = 12)) +
+    scale_fill_manual(values = c("High" = "#FF6666", "Medium" = "#FFCC66", "Low" = "#66FF66")) +  # Custom colors for Automation Risk
+    coord_flip()  # Flip the axes for better readability
+  
+  print(p)
+  
+  # Convert the ggplot object to an interactive plotly plot
+  interactive_plot <- ggplotly(p, tooltip = "text") %>% 
+    layout(title = list(text = paste("Automation Risk vs Industry in", location),
+                        font = list(size = 18)),
+           hoverlabel = list(font = list(size = 12)),
+           xaxis = list(tickfont = list(size = 10)),
+           yaxis = list(tickfont = list(size = 10)),
+           legend = list(title = list(text = "Automation Risk Levels")))
+  
+  # Rename summarized data columns
+  summarized_data <- summarized_data %>% rename(value_col1 = Automation_Risk, value_col2 = Job_Count)
+  
+  # Return both the interactive plot and the summarized data
+  return(list(
+    plot = interactive_plot,
+    data = summarized_data
+  ))
+}
+
+plot_skills_wordcloud <- function(location) {
+  filtered_data <- ai[ai$Location == location, ]
+  skill_text <- paste(filtered_data$Required_Skills, collapse = " ")
+  skill_corpus <- Corpus(VectorSource(skill_text))
+  skill_corpus <- tm_map(skill_corpus, content_transformer(tolower))
+  skill_corpus <- tm_map(skill_corpus, removePunctuation)
+  skill_corpus <- tm_map(skill_corpus, removeWords, stopwords("english"))
+  par(mai = c(0.1, 0.1, 0.1, 0.1))
+  wordcloud(skill_corpus, max.words = 100, random.order = FALSE)
+}
+```
+
+#IA Integration
+
+```{r}
+#Setting the API Key
+Sys.setenv(OPENAI_API_KEY = "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")
+
+library(httr)
+
+test_response <- GET(
+  url = "https://api.openai.com/v1/models",
+  add_headers(Authorization = paste("Bearer", Sys.getenv("OPENAI_API_KEY")))
+)
+
+print(content(test_response, "parsed"))
+
+# Test API Connectivity
+testAPIConnectivity <- function() {
+  response <- GET(
+    url = "https://api.openai.com/v1/models",
+    add_headers(Authorization = paste("Bearer", Sys.getenv("OPENAI_API_KEY")))
+  )
+  if (response$status_code == 200) {
+    return("API connection successful!")
+  } else {
+    return(content(response, "text"))
+  }
+}
+
+#Integrating ChatGPT
+#Function for integrating ChatGPT when there are only 2 columns of data
+generateGPTText <- function(chartType, chartData, location) {
+  api_key <- Sys.getenv("OPENAI_API_KEY")
+  
+  # Generate a summary for all industries
+  summary_text <- paste("Overall data summary: The chart includes the following industries and their", paste(chartType), ".",
+                        paste(chartData$Industry, ":", round(chartData$value_col, 2), collapse = "; "))
+  
+  # Combine everything into a prompt
+  prompt <- paste(
+    summary_text,
+    "Provide an explanation for the numbers listed in", location, ". After that please provide me a recommendation for student which industry to choose based on the numbers in graph.",
+    "Additionally, format this in html format and BOLD the names of the industries as well as the numbers given and dont include words like (Sure, here's the summary of automation impact on different industries in London) in HTML format with BOLD emphasis added",
+    "Format the output in HTML, but do not include <html> or <body> tags. Only use HTML tags for structuring the response, and bold the names of the industries and numbers."
+  )
+  print(paste("Prompt sent to ChatGPT:", prompt))  # Log the prompt for debugging
+  
+  
+  # Request body
+  request_body <- list(
+    model = "gpt-4",
+    messages = list(
+      list(role = "system", content = "You are an AI assistant providing detailed and contextual information."),
+      list(role = "user", content = prompt)
+    )
+  )
+  
+  # Making the POST request
+  response <- POST(
+    url = "https://api.openai.com/v1/chat/completions",
+    add_headers(
+      `Authorization` = paste("Bearer", api_key),
+      `Content-Type` = "application/json"
+    ),
+    body = toJSON(request_body, auto_unbox = TRUE),
+    encode = "json",
+    timeout(120)
+  )
+  
+  content <- content(response, "parsed")
+  print(content)  # Log the response
+  
+  if (!is.null(content$choices) && length(content$choices) > 0) {
+    return(content$choices[[1]]$message$content)
+  } else if (!is.null(content$error)) {
+    return(paste("API Error:", content$error$message))
+  } else {
+    return("Error: No valid response received from the API.")
+  }
+}
+#Function for integrating ChatGPT for when there are 3 columns of data
+#Integrating ChatGPT
+generateGPTText3 <- function(chartType, chartData, location) {
+  api_key <- Sys.getenv("OPENAI_API_KEY")
+  
+  # Generate a summary for all industries
+  summary_text <- paste("Overall data summary: The chart includes the following industries and their", paste(chartType), ".",
+                        paste(chartData$Industry, ":", chartData$value_col1, chartData$value_col2 , collapse = "; "))
+  
+  # Combine everything into a prompt
+  prompt <- paste(
+    summary_text,
+    "Provide an explanation for the numbers listed in", location, ".",
+    "Additionally, format this in html format and BOLD the names of the industries as well as the numbers given and dont include words like (Sure, here's the summary of automation impact on different industries in London) in HTML format with BOLD emphasis added",
+    "Format the output in HTML, but do not include <html> or <body> tags. Only use HTML tags for structuring the response, and bold the names of the industries and numbers."
+  )
+  print(paste("Prompt sent to ChatGPT:", prompt))  # Log the prompt for debugging
+  
+  
+  # Request body
+  request_body <- list(
+    model = "gpt-4",
+    messages = list(
+      list(role = "system", content = "You are an AI assistant providing detailed and contextual information."),
+      list(role = "user", content = prompt)
+    )
+  )
+  
+  # Making the POST request
+  response <- POST(
+    url = "https://api.openai.com/v1/chat/completions",
+    add_headers(
+      `Authorization` = paste("Bearer", api_key),
+      `Content-Type` = "application/json"
+    ),
+    body = toJSON(request_body, auto_unbox = TRUE),
+    encode = "json",
+    timeout(120)
+  )
+  
+  content <- content(response, "parsed")
+  print(content)  # Log the response
+  
+  if (!is.null(content$choices) && length(content$choices) > 0) {
+    return(content$choices[[1]]$message$content)
+  } else if (!is.null(content$error)) {
+    return(paste("API Error:", content$error$message))
+  } else {
+    return("Error: No valid response received from the API.")
+  }
+}
+
+# Test the API Connectivity
+print(testAPIConnectivity())
+
+#WORDCLOUD
+data_cloud =read_excel("Industry.xlsx") 
+
+plot_industry_wordcloud <- function(industryChoice) {
+  # Filtrar los datos por la industria seleccionada
+  industry_data <- subset(data_cloud, Industry == industryChoice)
+  
+  if (nrow(industry_data) > 0) {
+    # Determinar el número de colores en función de las palabras únicas
+    num_colors <- length(unique(industry_data$Carrer))
+    
+    # Crear una paleta de colores en tonos de azul
+    blue_palette <- colorRampPalette(c("lightblue", "blue", "darkblue"))
+    colors <- blue_palette(num_colors)
+    
+    # Configuración de los márgenes de la gráfica
+    par(mai = c(0.1, 0.1, 0.1, 0.1))
+    
+    # Generar la nube de palabras
+    wordcloud(words = industry_data$Carrer, 
+              freq = industry_data$Frecuencia,
+              scale = c(4, 0.5),  
+              min.freq = 1,
+              max.words = 200,
+              random.order = FALSE,
+              rot.per = 0,  # sin rotación
+              colors = colors,
+              family = "sans",  
+              fontface = "bold")
+  } else {
+    print("No data found for the selected industry.")
+  }
+}
+```
+
+#App
+##UI
+```{r}
+#UI
+ui <- navbarPage(
+  theme = shinytheme("flatly"),
+  title = "App",
+  tabPanel("Welcome",
+           fluidPage(
+             useShinyjs(),
+             titlePanel(" "),
+             uiOutput("welcomeContent1"),  # WELCOME PART 1
+             br(),
+             leafletOutput("cityMap"),
+             titlePanel(" "),
+             uiOutput("welcomeContent2"),  # WELCOME PART 2
+             br(),
+             #wordcloud
+             
+             fluidRow(
+               column(3, selectInput("industrySelected", "Select an industry:", choices = unique(data_cloud$Industry))),
+               column(9, plotOutput("wordcloud"))
+             )
+             
+           )),
+  tabPanel("Industry Impact", includeHTML("s2.html"),
+           tabsetPanel(
+             tabPanel("Automation impact", 
+                      fluidRow(
+                        column(3, selectInput("location1", "Select a location:", choices = unique(ai$Location))),
+                        column(9, plotOutput("plot1"), htmlOutput("text1"))
+                      )
+             ),
+             tabPanel("Automation risk", 
+                      fluidRow(
+                        column(3, selectInput("location2", "Select a location:", choices = unique(ai$Location))),
+                        column(9, plotlyOutput("plot2"), htmlOutput("text2"))
+                      )
+             ),
+             tabPanel("Salary", 
+                      fluidRow(
+                        column(3, selectInput("location3", "Select a location:", choices = unique(ai$Location))),
+                        column(9, plotOutput("plot3"), htmlOutput("text3"))
+                      )
+             ),
+             tabPanel("Job security", 
+                      fluidRow(
+                        column(3, selectInput("location4", "Select a location:", choices = unique(ai$Location))),
+                        column(9, plotOutput("plot4"), htmlOutput("text4"))
+                      )
+             ),
+             tabPanel("Compensation change", 
+                      fluidRow(
+                        column(3, selectInput("location5", "Select a location:", choices = unique(ai$Location))),
+                        column(9, plotOutput("plot5"), htmlOutput("text5"))
+                      )
+             )
+           )
+  ),
+  tabPanel("Automation Risk and Probability", includeHTML("s3.html"),
+           tabsetPanel(
+             tabPanel("Automation probability", 
+                      fluidRow(
+                        column(3, selectInput("location6", "Select a location:", choices = unique(ai$Location))),
+                        column(9, plotOutput("plot6"), htmlOutput("text6"))
+                      )
+             ),
+             tabPanel("Interactive automation probability", 
+                      fluidRow(
+                        column(3, selectInput("location7", "Select a location:", choices = unique(ai$Location))),
+                        column(9, plotlyOutput("plot7"), htmlOutput("text7"))
+                      )
+             ),
+             tabPanel("Interactive automation", 
+                      fluidRow(
+                        column(3, selectInput("location8", "Select a location:", choices = unique(ai$Location))),
+                        column(9, plotlyOutput("plot8"), htmlOutput("text8"))
+                      )
+             ),
+             tabPanel("Ridgeline automation", 
+                      fluidRow(
+                        column(3, selectInput("location9", "Select a location:", choices = unique(ai$Location))),
+                        column(9, plotOutput("plot9"), htmlOutput("text9"))
+                      )
+             )
+           )
+  ),
+  tabPanel("Job Market Trends", includeHTML("s4.html"),
+           tabsetPanel(
+             tabPanel("Job growth", 
+                      fluidRow(
+                        column(3, selectInput("location10", "Select a location:", choices = unique(ai$Location))),
+                        column(9, plotOutput("plot10"), htmlOutput("text10"))
+                      )
+             ),
+             tabPanel("Skills vs Risk", 
+                      fluidRow(
+                        column(3, selectInput("location11", "Select a location:", choices = unique(ai$Location))),
+                        column(9, plotlyOutput("plot11"), htmlOutput("text11"))
+                      )
+             )
+           )
+  ),
+  tabPanel("Workplace Dynamics", includeHTML("s5.html"),
+           tabsetPanel(
+             tabPanel("AI adoption by company size", 
+                      fluidRow(
+                        column(3, selectInput("location12", "Select a location:", choices = unique(ai$Location))),
+                        column(9, plotOutput("plot12"), htmlOutput("text12"))
+                      )
+             ),
+             tabPanel("Remote friendly", 
+                      fluidRow(
+                        column(3, selectInput("location13", "Select a location:", choices = unique(ai$Location))),
+                        column(9, plotOutput("plot13"), htmlOutput("text13"))
+                      )
+             ),
+             tabPanel("Skills", 
+                      fluidRow(
+                        column(3, selectInput("location14", "Select a location:", choices = unique(ai$Location))),
+                        column(9, plotOutput("plot14"), htmlOutput("text14"))
+                      )
+             )
+           )
+  )
+  
+           ,
+  tabPanel("Advice and resources", includeHTML("s6.html")),
+  tags$head(
+    tags$link(rel = "stylesheet", type = "text/css")
+  )
+)
+```
+
+##Server
+```{r}
+#SERVER
+server <- function(input, output) {
+  #WELCOME PART 1
+  output$welcomeContent1 <- renderUI({
+    HTML(paste(readLines("welcome1.html"), collapse = "\n"))
+  })
+  
+  #WELCOME PART 2
+  output$welcomeContent2 <- renderUI({
+    HTML(paste(readLines("welcome2.html"), collapse = "\n"))
+  })
+  
+  
+  #MAP
+  output$cityMap <- renderLeaflet({
+    iconos <- list(
+      berlin = makeIcon(iconUrl = "berlin.jpeg", iconWidth = 40, iconHeight = 40),
+      newYork = makeIcon(iconUrl = "newYork.jpeg", iconWidth = 40, iconHeight = 40),
+      dubai = makeIcon(iconUrl = "dubai.jpg", iconWidth = 40, iconHeight = 40),
+      singapore = makeIcon(iconUrl = "singapore.avif", iconWidth = 40, iconHeight = 40),
+      paris = makeIcon(iconUrl = "paris.jpg", iconWidth = 40, iconHeight = 40),
+      sanF = makeIcon(iconUrl ="sanfran.jpg", iconWidth = 40, iconHeight = 40),
+      sydney = makeIcon(iconUrl = "sydney.webp", iconWidth = 40, iconHeight = 40),
+      tokyo = makeIcon(iconUrl = "tokyo.webp", iconWidth = 40, iconHeight = 40),
+      toronto = makeIcon(iconUrl = "toronto.avif", iconWidth = 40, iconHeight = 40),
+      london = makeIcon(iconUrl = "london.jpg", iconWidth = 40, iconHeight = 40)
+    )
+    
+    # Create the map
+    leaflet() %>%
+      addTiles() %>%
+      addMarkers(lng=13.4050, lat=52.5200, icon=iconos$berlin, popup="Berlin") %>%
+      addMarkers(lng=-74.0060, lat=40.7128, icon=iconos$newYork, popup="New York") %>%
+      addMarkers(lng=55.2708, lat=25.2048, icon=iconos$dubai, popup="Dubai") %>%
+      addMarkers(lng=103.8198, lat=1.3521, icon=iconos$singapore, popup="Singapore") %>%
+      addMarkers(lng=2.3522, lat=48.8566, icon=iconos$paris, popup="Paris") %>%
+      addMarkers(lng=-122.4194, lat=37.7749, icon=iconos$sanF, popup="San Francisco") %>%
+      addMarkers(lng=151.2093, lat=-33.8688, icon=iconos$sydney, popup="Sydney") %>%
+      addMarkers(lng=139.6917, lat=35.6895, icon=iconos$tokyo, popup="Tokyo") %>%
+      addMarkers(lng=-79.3832, lat=43.6532, icon=iconos$toronto, popup="Toronto") %>%
+      addMarkers(lng=-0.1276, lat=51.5074, icon=iconos$london, popup="London")
+  })
+  
+  
+  #WORDCLOUD
+  output$wordcloud <- renderPlot({
+    plot_industry_wordcloud(input$industrySelected)
+  })
+  
+  #GRAPHICS
+  #Automation Impact Score
+  output$text1 <- renderUI({
+    location <- input$location1
+    plot_data <- plot_industry_automation_impact_score(input$location1)  # Get plot and data
+    chartType <- "Automation Impact Score"
+    
+    print(plot_data$data)
+    # Format the data points as a string for inclusion in the explanation
+    data_points <- paste0(
+      "<ul>",
+      paste0("<li><b>", plot_data$data$Industry, "</b>: ", plot_data$data$average_value, "</li>", collapse = ""),
+      "</ul>"
+    )
+    
+    withProgress(message = 'Fetching explanation...', value = 0.5, {
+      explanation <- generateGPTText(chartType, plot_data$data, location)  # Pass data to ChatGPT
+      
+      # Combine explanation with data points in HTML format
+      HTML(paste(
+        "<p>", explanation, "</p>",
+        "<h4>Data Points Used in the Plot:</h4>",
+        data_points
+      ))
+    })
+  })
+  
+  output$plot1 <- renderPlot({
+    plot_industry_automation_impact_score(input$location1)
+  })
+  
+
+  
+  # Automation Risk by Industry - Text Explanation
+  output$text2 <- renderUI({
+    location <- input$location2
+    plot_data <- plot_automation_risk_by_industry(input$location2)  # Get plot and data
+    chartType <- "Automation Risk by industry"
+    print(plot_data$data)
+    withProgress(message = 'Fetching explanation...', value = 0.5, {
+      explanation <- generateGPTText3(chartType, plot_data$data, location)  # Pass data to ChatGPT
+      HTML(paste("<p>", explanation, "</p>"))
+    })
+  })
+
+  # Automation Risk by Industry
+  output$plot2 <- renderPlotly({
+    result <- plot_automation_risk_by_industry(input$location2)  # Return only the plot
+    print(result$plot)
+  })
+  
+
+  
+  
+  #Salary by industry
+  output$text3 <- renderUI({
+    location <- input$location3
+    plot_data <- plot_salary_by_industry(input$location3)  # Get plot and data
+    chartType <- "Salary by industry"
+    
+    withProgress(message = 'Fetching explanation...', value = 0.5, {
+      explanation <- generateGPTText(chartType, plot_data$data, location)  # Pass data to ChatGPT
+      HTML(paste("<p>", explanation, "</p>"))
+    })
+  })
+  output$plot3 <- renderPlot({
+    plot_salary_by_industry(input$location3)
+  })
+  
+  #Job security by industry
+  output$text4 <- renderUI({
+    location <- input$location4
+    plot_data <- plot_job_security_by_industry(input$location4)  # Get plot and data
+    chartType <- "Job security by industry"
+    
+    withProgress(message = 'Fetching explanation...', value = 0.5, {
+      explanation <- generateGPTText(chartType, plot_data$data, location)  # Pass data to ChatGPT
+      HTML(paste("<p>", explanation, "</p>"))
+    })
+  })
+  output$plot4 <- renderPlot({
+    plot_job_security_by_industry(input$location4)
+  })
+  
+  #Compensation Change By Industry
+  output$text5 <- renderUI({
+    location <- input$location5
+    plot_data <- plot_compensation_change_by_industry(input$location5)  # Get plot and data
+    chartType <- "Compensation Change By Industry"
+    
+    withProgress(message = 'Fetching explanation...', value = 0.5, {
+      explanation <- generateGPTText(chartType, plot_data$data, location)  # Pass data to ChatGPT
+      HTML(paste("<p>", explanation, "</p>"))
+    })
+  })
+  output$plot5 <- renderPlot({
+    plot_compensation_change_by_industry(input$location5)
+  })
+  
+  
+  #second panel
+  #Automation probability by industry
+  output$text6 <- renderUI({
+    location <- input$location6
+    plot_data <- plot_automation_probability_by_industry(input$location6)  # Get plot and data
+    chartType <- "Automation probability by industry"
+    
+    withProgress(message = 'Fetching explanation...', value = 0.5, {
+      explanation <- generateGPTText(chartType, plot_data$data, location)  # Pass data to ChatGPT
+      HTML(paste("<p>", explanation, "</p>"))
+    })
+  })
+  output$plot6 <- renderPlot({
+    plot_automation_probability_by_industry(input$location6)
+  })
+  
+  #Interactive Automation Probability by Industry
+  output$plot7 <- renderPlotly({
+    plot_interactive_automation_probability_by_industry(input$location7)
+  })
+  
+  #Interactive automation boxplot
+
+  output$plot8 <- renderPlotly({
+    plot_interactive_automation_boxplot(input$location8)
+  })
+  
+  #Ridgeline Automation
+
+  output$plot9 <- renderPlot({
+    plot_ridgeline_automation(input$location9)
+  })
+  
+  #Third panel
+  #Job Growth By Industry
+  output$text10 <- renderUI({
+    location <- input$location10
+    plot_data <- plot_job_growth_by_industry(input$location10)  # Get plot and data
+    chartType <- ""
+    
+    withProgress(message = 'Fetching explanation...', value = 0.5, {
+      explanation <- generateGPTText3(chartType, plot_data$data, location)  # Pass data to ChatGPT
+      HTML(paste("<p>", explanation, "</p>"))
+    })
+  })
+  output$plot10 <- renderPlot({
+    result <- plot_job_growth_by_industry(input$location10)
+    print(result$plot)
+  })
+  
+  #Skills vs Risk
+  output$text11 <- renderUI({
+    location <- input$location11
+    plot_data <- plot_skills_vs_risk_percent(input$location11)  # Get plot and data
+    chartType <- ""
+    
+    withProgress(message = 'Fetching explanation...', value = 0.5, {
+      explanation <- generateGPTText3(chartType, plot_data$data, location)  # Pass data to ChatGPT
+      HTML(paste("<p>", explanation, "</p>"))
+    })
+  })
+  output$plot11 <- renderPlotly({
+    result <- plot_skills_vs_risk_percent(input$location11)
+    print(result$plot)
+  })
+  
+  #fourth panel 
+  #Ai Adoption by company size
+  output$text12 <- renderUI({
+    location <- input$location12
+    plot_data <- plot_ai_adoption_by_company_size(input$location12)  # Get plot and data
+    chartType <- "Ai Adoption by company size"
+    
+    withProgress(message = 'Fetching explanation...', value = 0.5, {
+      explanation <- generateGPTText(chartType, plot_data$data, location)  # Pass data to ChatGPT
+      HTML(paste("<p>", explanation, "</p>"))
+    })
+  })
+  output$plot12 <- renderPlot({
+    plot_ai_adoption_by_company_size(input$location12)
+  })
+  
+  #Remote Friendly by Industry
+  output$text13 <- renderUI({
+    location <- input$location13
+    plot_data <- plot_remote_friendly_by_industry(input$location13)  # Get plot and data
+    chartType <- ""
+    
+    withProgress(message = 'Fetching explanation...', value = 0.5, {
+      explanation <- generateGPTText(chartType, plot_data$data, location)  # Pass data to ChatGPT
+      HTML(paste("<p>", explanation, "</p>"))
+    })
+  })
+  output$plot13 <- renderPlot({
+    plot_remote_friendly_by_industry(input$location13)
+  })
+  
+  #Skills Wordcloud
+  output$plot14 <- renderPlot({
+    plot_skills_wordcloud(input$location14)
+  })
+  
+}
+```
+
+##Run App
+
+```{r}
+shinyApp(ui = ui, server = server)
+
+shiny::addResourcePath("www", "C:\\Users\\alega\\OneDrive\\Documentos\\ProjecttR")
+
+```
+#Recommendations
+
+##Singapore
+To thrive in Singapore’s evolving job market, students should aim for industries that offer a balance of growth, automation resistance, and flexibility. Prioritize developing AI-related technical skills while also focusing on leadership and strategic roles. Industries such as Telecommunications, Finance, and Technology offer promising opportunities with lower automation risks, good salaries, and flexibility in work arrangements. By staying agile and continuously upskilling, students can future-proof their careers in an AI-driven landscape.
+
+
+##New York
+Students considering their career path in New York should weigh automation risks and job security by industry. Industries such as healthcare and telecommunications exhibit high automation probabilities, indicating that roles in these sectors may face greater automation challenges. However, job security appears robust in fields like finance and technology, which also offer competitive average salaries, making them attractive options for stable and lucrative careers. Skills related to data analysis and machine learning show lower automation risk, suggesting that technical and analytical skills remain valuable and adaptable in the evolving job market. Additionally, larger companies tend to adopt AI at higher rates, making them ideal for roles involving innovation and AI application.
+
+
+##San Francisco
+To thrive in San Francisco's evolving job market, prioritize industries balancing growth, automation resistance, and competitive salaries. Education and Transportation offer promising growth, reasonable automation resilience and stability. Consider Finance and Telecommunications strategically, focusing on roles requiring uniquely human skills. Technology has significant automation risk; specialize in AI/ML related fields to stay competitive. Develop in-demand skills like data analysis, cybersecurity, and management, alongside strong communication abilities. By strategically choosing industries and continuously upskilling, you can future-proof your career in San Francisco.
+
+
+##Sydney
+To thrive in Sydney’s evolving job market, prioritize industries balancing growth, automation resistance, and compensation. Finance offers decent job security and salary with moderate automation probability. Healthcare shows promising growth and low automation risk. Technology presents good salaries with relatively low automation. Develop in-demand skills like UX/UI design, project management, and Python, complementing them with uniquely human skills like creativity and critical thinking. Focusing on medium-sized companies may offer greater exposure to AI-driven opportunities. By strategically upskilling, individuals can navigate Sydney's dynamic landscape and secure a future-proof career.
+
+
+##Berlin
+For students in Berlin considering career paths, Finance and Healthcare appear as strategic choices due to their low automation risks, strong compensation growth, and stable job security. In contrast, industries like Transportation and Technology show high automation probabilities, making them more susceptible to disruption by AI. For students focused on long-term stability, developing skills in areas like Communication and Cybersecurity, which have lower automation risks, may be beneficial. Job growth is projected to be robust in sectors such as Education, Technology, and Telecommunications, which could offer expanding opportunities. Additionally, industries like Technology and Telecommunications also show a high proportion of remote-friendly roles, ideal for those seeking flexible work options.
+
+
+##Dubai
+In Dubai, students should be cautious about industries with high automation risk, such as Education, Technology, and Finance, which show elevated probabilities for job automation. However, certain sectors like Energy exhibit the lowest automation probability, making it a relatively safer choice for long-term job security. Finance, in particular, stands out with the highest percentage change in total compensation, suggesting strong earning potential despite its automation risk. Meanwhile, Healthcare and Manufacturing maintain moderate automation probabilities with consistent job security indexes, indicating stability with competitive salaries. Overall, while Finance offers the most lucrative compensation growth, sectors like Energy and Healthcare may provide a balanced mix of job security and reasonable pay in a rapidly automating market.
+
+
+##Toronto
+In Toronto, industries such as healthcare and education show high automation risk, with healthcare reaching an average automation probability of over 85%. Healthcare also offers the highest average salary among industries, while fields like manufacturing, retail, and transportation provide relatively lower earnings. Job security in many sectors is rated medium, although specific industries like finance and telecommunications show lower automation risks, suggesting more stable employment. Additionally, large companies tend to lead in AI adoption, indicating better prospects in technology-adopting roles. Students should consider fields with high compensation potential and moderate automation risks, such as telecommunications or finance, while keeping an eye on automation trends in more vulnerable sectors like healthcare.
+
+##Tokyo
+For students planning to work in Tokyo, aligning with industry trends in automation risk, job security, salaries, and growth can guide informed career choices. Industries like Education, Telecommunications, and Manufacturing offer higher job security, making them ideal for those seeking stable roles. For high salaries, Healthcare, Finance, and Telecommunications stand out. Sectors such as Healthcare, Entertainment, and Technology have lower automation risks, offering safer options for students concerned about job displacement, while Transportation and Energy carry higher automation risks and may require specialized roles. Developing in-demand skills like Cybersecurity, Data Analysis, and Project Management can secure lower-risk roles, especially in sectors like Finance, Technology, and Telecommunications. For flexibility, Education, Healthcare, and Finance provide more remote-friendly opportunities. Larger and medium-sized companies in Tokyo show a higher AI adoption rate, creating opportunities for students with technical expertise. By focusing on these skills and industries, students can enhance their job prospects and security in Tokyo’s dynamic job market.
+
+##Paris
+For students looking to work in Paris, it’s important to consider industry trends in automation risk, job security, salaries, and growth. Industries like Telecommunications and Finance offer higher job security, making them suitable for those seeking stable roles. For higher salaries, Retail, Transportation, and Healthcare stand out as attractive options. The Energy and Technology sectors have lower automation risks, making them safer choices for students concerned about job displacement, while fields like Education and Retail have higher automation risks and may require focusing on roles with complex, less automatable tasks. Developing in-demand skills like Project Management, Marketing, and Python can help secure lower-risk roles, especially in technical fields such as Finance and Telecommunications where these skills are highly valued. For students prioritizing work flexibility, Education, Healthcare, and Finance offer more remote-friendly roles. Additionally, larger and medium-sized companies in Paris show a higher AI adoption rate, providing opportunities for tech-savvy students interested in innovative roles. By aligning their skills and career preferences with these trends, students can make informed choices for a successful career in Paris.
+
+
+##London
+For students aiming to work in London, the choice of industry, skills development, and understanding of automation and job trends are key. Education and Retail sectors offer lower automation risks and higher job security, making them attractive for those seeking stability. In contrast, Finance, Entertainment, and Manufacturing industries provide higher average salaries and strong growth projections, ideal for students looking for well-compensated and expanding fields. Developing in-demand skills like Python, Marketing, Project Management, and Sales can reduce automation vulnerability, especially in high-risk sectors like Healthcare and Technology. For flexibility, industries like Education, Finance, and Entertainment offer more remote-friendly roles. Larger companies have a higher AI adoption rate, which may benefit students with technical skills interested in innovative, AI-driven roles. By aligning their skills and preferences with these trends, students can make informed career choices in London.
