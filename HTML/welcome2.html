@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bienvenido</title>
+    <!-- Enlace al CSS de Bootstrap para el estilo -->
+    <link href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Estilos personalizados -->
+    <style>
+        /* Estilos existentes para el carrusel */
+        .carousel-inner > .item > img {
+            width: 100%;
+            height: 300px;
+        }
+        .carousel-caption h1, .carousel-caption p {
+            color: white;
+        }
+    
+        /* Nuevo estilo para agregar margen debajo del carrusel */
+        #welcomeCarousel {
+            margin-bottom: 50px; /* Ajusta este valor según sea necesario */
+        }
+    
+        /* Estilos para la sección informativa debajo del carrusel */
+        .marketing {
+            padding-top: 50px; /* Espacio encima de toda la sección */
+            padding-bottom: 50px; /* Espacio debajo de toda la sección */
+        }
+        .marketing .col-lg-3 {
+            text-align: center;
+            margin-top: 20px; /* Añade espacio encima de cada columna si es necesario */
+            padding: 20px; /* Espacio alrededor de cada columna */
+        }
+        .card-body {
+        background-color: #f8f9fa; /* Color de fondo para el contenido expansible */
+        border-radius: 5px; /* Bordes redondeados para el div */
+        padding: 20px; /* Espaciado interno para el contenido */
+        margin-top: 15px; /* Espacio arriba para separar del botón */
+        }
+        /* Nuevos estilos para dividir el contenido en dos columnas */
+        .featurette {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding-bottom: 40px; /* Espacio adicional antes del siguiente bloque */
+        }
+        .featurette-image {
+            flex: 1;
+            padding-right: 20px;
+        }
+        .featurette-text {
+            flex: 1;
+            text-align: justify;
+        }
+        .mitos-heading {
+            font-size: 50px; /* Tamaño del texto */
+            padding: 20px 0; /* Espacio arriba y abajo para centrar verticalmente dentro de su contenedor */
+            margin-top: 20px; /* Espacio adicional en la parte superior si es necesario */
+            font-weight: bold; /* Hacer el texto más grueso */
+            color: #333; /* Color del texto, ajusta según tu diseño */
+            font-family: 'Arial', sans-serif; /* Tipo de letra */
+            letter-spacing: 25px; /* Aumenta el espacio entre caracteres */
+        }
+
+        .custom-text {
+            padding-bottom: 40px;
+            font-family: 'Arial', sans-serif; /* Tipo de letra Sans-serif, común y adecuada para el texto */
+            color: #0000ff; /* Código de color hexadecimal para azul */
+            font-size: 24px; /* Tamaño de letra adecuado para hacerlo legible */
+            text-align: center; /* Centra el texto horizontalmente dentro de su contenedor */
+            padding: 20px;
+        }
+
+        .centered-text {
+            text-align: center; /* Alinea el texto al centro horizontalmente */
+            padding: 15px; /* Añade algo de espacio alrededor del texto */
+            margin-top: 20px; /* Espacio adicional en la parte superior si es necesario */
+            font-size: 20px;
+            margin-left: 50px; /* Margen izquierdo */
+            margin-right: 50px; /* Margen derecho */
+
+        }
+
+        .card-body {
+            padding: 40px;
+        }
+
+
+
+    
+
+    </style>
+    
+</head>
+<body>
+    
+    <div class="container">
+        <div class="row">
+            <div class="col-md-12">
+                <h2 class="featurette-heading">Do you know which industry your job or job prospect belongs to?</h2>
+                <p class="lead">Below you can find a list of different industries. Select one, and on the right, a cloud of professions or related university careers will appear. Recognizing which industry you belong to is very important as it helps you navigate the work and business environment better, improving your chances of success and professional satisfaction. If you want to learn more about the importance of this, click on 'Read more'.</p>
+                <p><a class="btn btn-primary" data-toggle="collapse" href="#moreInfo" role="button" aria-expanded="false" aria-controls="moreInfo">Read more &raquo;</a></p>
+                <div class="collapse" id="moreInfo">
+                    <div class="card card-body">
+                        Understanding the industry helps you identify key skills and knowledge needed to advance in your career. It also allows you to keep up with trends and changes that may impact your current and future role. Industries evolve over time, influenced by technology, policies, and social changes. Understanding the industry helps you anticipate these changes and adapt your skills and business strategies to maintain competitiveness.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+
+
+    <!-- Bootstrap JavaScript -->
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.12.4/jquery.min.js"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
+</body>
+</html>
